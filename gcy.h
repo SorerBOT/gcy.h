@@ -1,6 +1,8 @@
 #ifndef GCY_H
 #define GCY_H
 
+#define EXIT_INCONSISTENT_ALLOC_LIST 11
+
 #include <stdlib.h>
 #ifdef GCY_MODE
 
@@ -19,7 +21,7 @@ typedef struct GCY_AllocationsList
 
 void* gcy_malloc(size_t size, char* file, int line);
 void gcy_free(void* ptr);
-void gcy_print_errors();
+void gcy_print_allocations();
 
 #define GCY_MALLOC(size) gcy_malloc((size), __FILE__, __LINE__)
 #define GCY_FREE(ptr) gcy_free((ptr))
@@ -35,6 +37,7 @@ void gcy_print_errors();
 
 
 GCY_AllocationsList* allocList = NULL;
+GCY_AllocationsList* last_allocation = NULL;
 
 void* gcy_malloc(size_t size, char* file, int line)
 {
@@ -65,10 +68,41 @@ void* gcy_malloc(size_t size, char* file, int line)
         .line = line,
         .ptr  = ptr
     };
-    root_new->next = allocList;
-    allocList = root_new;
+    root_new->next = NULL;
+
+    if (last_allocation == NULL) /* This implies that allocList is also NULL */
+    {
+        if (allocList != NULL)
+        {
+            fprintf(stderr, "Error: GCY internal error.");
+            exit(EXIT_INCONSISTENT_ALLOC_LIST);
+        }
+
+        last_allocation = root_new;
+        allocList = root_new;
+    }
+    else
+    {
+        last_allocation->next = root_new;
+        last_allocation = root_new;
+    }
 
     return ptr;
+}
+void gcy_print_allocation(const GCY_Allocation* allocation)
+{
+    printf("File: %s, line: %d, size: %lu, address: %p\n", allocation->file, allocation->line, allocation->size, allocation->ptr);
+}
+void gcy_print_allocations()
+{
+    printf("=============================================\n");
+    GCY_AllocationsList* temp = allocList;
+    while (temp != NULL)
+    {
+        gcy_print_allocation(temp->alloc);
+        temp = temp->next;
+    }
+    printf("=============================================\n");
 }
 
 #endif /* GCY_IMPLEMENTATION */

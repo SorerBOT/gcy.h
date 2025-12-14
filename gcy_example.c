@@ -8,5 +8,15 @@ int main()
 {
     char* my_str = "hello world\n";
     char* ptr = (char*)GCY_MALLOC(strlen(my_str) * sizeof(char));
+    GCY_MALLOC(strlen(my_str) * sizeof(char));
+    GCY_MALLOC(strlen(my_str) * sizeof(char));
+    GCY_MALLOC(strlen(my_str) * sizeof(char));
+    GCY_MALLOC(strlen(my_str) * sizeof(char));
+    GCY_MALLOC(strlen(my_str) * sizeof(char));
+    GCY_MALLOC(strlen(my_str) * sizeof(char));
+    GCY_MALLOC(strlen(my_str) * sizeof(char));
+    GCY_MALLOC(strlen(my_str) * sizeof(char));
     memcpy(ptr, my_str, strlen(my_str));
+
+    gcy_print_allocations();
 }
