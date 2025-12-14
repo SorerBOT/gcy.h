@@ -9,3 +9,84 @@ On a serious note, I use Valgrind's memcheck occasionally, and I feel as if this
 >Your program will run much slower (eg. 20 to 30 times) than normal, and use a lot more memory. Memcheck will issue messages about memory errors and leaks that it detects.
 
 on the other hand, my program's memory footprint is significantly smaller (at least if the application is big) and the overhead is only a fragment of Valgrind's.
+
+## Example
+In the following code, the programmer (me) forgot to deallocate some memory. 
+```c
+#include <string.h>
+#include <stdio.h>
+#define GCY_MODE 1
+#define GCY_IMPLEMENTATION 1
+#include "gcy.h"
+
+int main()
+{
+    char* my_str = "hello world\n";
+    char* ptr = (char*)GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_1 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_2 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_3 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_4 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_5 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_6 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_7 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_8 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    memcpy(ptr, my_str, strlen(my_str));
+
+    GCY_FREE(ptr);
+    GCY_FREE(ptr_1);
+    GCY_FREE(ptr_2);
+}
+```
+Garbage Collect-your steps into action after the your code finishes, and outputs the following:
+```shell
+=============================================
+Garbage Collect-your Data:
+File: gcy_example.c, line: 13, size: 12, address: 0x6000022540a0
+File: gcy_example.c, line: 14, size: 12, address: 0x6000022540c0
+File: gcy_example.c, line: 15, size: 12, address: 0x6000022540e0
+File: gcy_example.c, line: 16, size: 12, address: 0x600002254100
+File: gcy_example.c, line: 17, size: 12, address: 0x600002254120
+File: gcy_example.c, line: 18, size: 12, address: 0x600002254140
+=============================================
+```
+You now know exactly what memory you forgot to free. Say you fixed your code, to get:
+```c
+#include <string.h>
+#include <stdio.h>
+#define GCY_MODE 1
+#define GCY_IMPLEMENTATION 1
+#include "gcy.h"
+
+int main()
+{
+    char* my_str = "hello world\n";
+    char* ptr = (char*)GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_1 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_2 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_3 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_4 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_5 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_6 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_7 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    char* ptr_8 = GCY_MALLOC(strlen(my_str) * sizeof(char));
+    memcpy(ptr, my_str, strlen(my_str));
+
+    GCY_FREE(ptr);
+    GCY_FREE(ptr_1);
+    GCY_FREE(ptr_2);
+    GCY_FREE(ptr_3);
+    GCY_FREE(ptr_4);
+    GCY_FREE(ptr_5);
+    GCY_FREE(ptr_6);
+    GCY_FREE(ptr_7);
+    GCY_FREE(ptr_8);
+}
+```
+Garbage Collect-you will now inform you that you that all allocations were free'd:
+```shell
+=============================================
+Garbage Collect-your Data:
+No garbage to collect.
+=============================================
+```
