@@ -125,8 +125,15 @@ void gcy_print_allocation(const GCY_Allocation* allocation)
 {
     printf("File: %s, line: %d, size: %lu, address: %p\n", allocation->file, allocation->line, allocation->size, allocation->ptr);
 }
+
+__attribute__((destructor))
 void gcy_print_allocations()
 {
+    if (allocList == NULL)
+    {
+        return;
+    }
+
     printf("=============================================\n");
     GCY_AllocationsList* temp = allocList;
     while (temp != NULL)

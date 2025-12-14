@@ -21,6 +21,4 @@ int main()
     GCY_FREE(ptr);
     GCY_FREE(ptr_1);
     GCY_FREE(ptr_2);
-
-    gcy_print_allocations();
 }
