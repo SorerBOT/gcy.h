@@ -1,0 +1,6 @@
+CompileFlags:
+  Add: 
+    - -DGCY_MODE
+    - -DGCY_IMPLEMENTATION
+    - -Iexternal
+    - -Iinclude
