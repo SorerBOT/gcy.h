@@ -89,6 +89,24 @@ void* gcy_malloc(size_t size, char* file, int line)
 
     return ptr;
 }
+void gcy_free(void* ptr)
+{
+    if (ptr == NULL)
+    {
+        return;
+    }
+
+    GCY_AllocationsList* temp = allocList;
+    while (temp != NULL)
+    {
+        if (temp->next->alloc->ptr == ptr)
+        {
+            GCY_AllocationsList* ptr_node = temp->next;
+            free(ptr_node->alloc)
+            temp->next = temp->next->next;
+        }
+    }
+}
 void gcy_print_allocation(const GCY_Allocation* allocation)
 {
     printf("File: %s, line: %d, size: %lu, address: %p\n", allocation->file, allocation->line, allocation->size, allocation->ptr);
