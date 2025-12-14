@@ -129,12 +129,13 @@ void gcy_print_allocation(const GCY_Allocation* allocation)
 __attribute__((destructor))
 void gcy_print_allocations()
 {
-    if (allocList == NULL)
-    {
-        return;
-    }
 
     printf("=============================================\n");
+    printf("Garbage Collect-your Data:\n");
+    if (allocList == NULL)
+    {
+        printf("No garbage to collect.\n");
+    }
     GCY_AllocationsList* temp = allocList;
     while (temp != NULL)
     {
