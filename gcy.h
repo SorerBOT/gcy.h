@@ -147,6 +147,7 @@ void gcy_free(void* ptr)
         temp = next_node;
     }
 }
+
 void gcy_print_allocation(const GCY_Allocation* allocation)
 {
     printf("File: %s, line: %d, size: %lu, address: %p\n", allocation->file, allocation->line, allocation->size, allocation->ptr);
