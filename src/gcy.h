@@ -37,18 +37,20 @@ typedef struct
 {
     GCY_linked_list_t list_data;
     size_t size;
-    char* file;
+    const char* file;
     int line;
     void* ptr;
 } GCY_Allocation;
 
-void* gcy_malloc(size_t size, char* file, int line);
+void* gcy_malloc(size_t size, const char* file, int line);
+void* gcy_calloc(size_t count, size_t size, const char* file, int line);
 void gcy_free(void* ptr);
 void gcy_print_allocations();
 GCY_Allocation* gcy_debug_get_allocations();
 size_t gcy_debug_get_allocations_count();
 
 #define GCY_MALLOC(size) gcy_malloc((size), __FILE__, __LINE__)
+#define GCY_CALLOC(count, size) gcy_calloc((count), (size), __FILE__, __LINE__)
 #define GCY_FREE(ptr) gcy_free((ptr))
 #else /* GCY_MODE */
 #define GCY_MALLOC(size) malloc((size))
@@ -65,15 +67,10 @@ GCY_Allocation* allocList = NULL;
 GCY_Allocation* last_allocation = NULL;
 size_t allocsCount = 0;
 
-void* gcy_malloc(size_t size, char* file, int line)
-{
-    void* ptr = malloc(size);
-    if (ptr == NULL)
-    {
-        fprintf(stderr, "Error: malloc");
-        exit(EXIT_FAILURE);
-    }
+static void gcy__internal_append_allocation(void* ptr, size_t size, const char* file, int line);
 
+static void gcy__internal_append_allocation(void* ptr, size_t size, const char* file, int line)
+{
     GCY_Allocation* root_new = malloc(sizeof(GCY_Allocation));
     if (root_new == NULL)
     {
@@ -111,6 +108,32 @@ void* gcy_malloc(size_t size, char* file, int line)
     }
 
     ++allocsCount;
+}
+void* gcy_malloc(size_t size, const char* file, int line)
+{
+    void* ptr = malloc(size);
+    if (ptr == NULL)
+    {
+        fprintf(stderr, "Error: malloc");
+        exit(EXIT_FAILURE);
+    }
+
+    gcy__internal_append_allocation(ptr, size, file, line);
+
+    return ptr;
+}
+
+void* gcy_calloc(size_t count, size_t size, const char* file, int line)
+{
+    void* ptr = calloc(count, size);
+    if (ptr == NULL)
+    {
+        fprintf(stderr, "Error: malloc");
+        exit(EXIT_FAILURE);
+    }
+
+    gcy__internal_append_allocation(ptr, count * size, file, line);
+
     return ptr;
 }
 

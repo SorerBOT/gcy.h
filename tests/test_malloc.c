@@ -1,9 +1,13 @@
 #include <string.h>
 #include <stdio.h>
+
+#define CUNIT_IMPLEMENTATION
+#include "external/cunit.h"
+
 #define GCY_MODE 1
 #define GCY_IMPLEMENTATION 1
 #include "../src/gcy.h"
-#include "./external/cunit.h"
+
 
 CUNIT_TEST(test_single)
 {
@@ -141,10 +145,4 @@ CUNIT_TEST(free_in_different_order)
         allocs = (GCY_Allocation*) allocs->list_data.next_node;
     }
     CUNIT_ASSERT_INT_EQ(gcy_debug_get_allocations_count(), amount_of_allocs_found);
-}
-
-int main()
-{
-    cunit_run_registered_tests();
-    cunit_free_tests(); /* This is completely optional as this function also runs in the destructor */
 }
