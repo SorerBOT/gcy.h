@@ -63,11 +63,12 @@ size_t gcy_debug_get_allocations_count();
 #include <stdlib.h>
 
 
-GCY_Allocation* allocList = NULL;
-GCY_Allocation* last_allocation = NULL;
-size_t allocsCount = 0;
+static GCY_Allocation* allocList = NULL;
+static GCY_Allocation* last_allocation = NULL;
+static size_t allocsCount = 0;
 
 static void gcy__internal_append_allocation(void* ptr, size_t size, const char* file, int line);
+
 
 static void gcy__internal_append_allocation(void* ptr, size_t size, const char* file, int line)
 {
@@ -206,3 +207,4 @@ size_t gcy_debug_get_allocations_count()
 }
 
 #endif /* GCY_IMPLEMENTATION */
+
