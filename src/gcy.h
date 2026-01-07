@@ -137,7 +137,7 @@ void gcy_free(void* ptr)
     while (temp != NULL)
     {
         GCY_Allocation* next_node = (GCY_Allocation*) temp->list_data.next_node;
-        if (next_node->ptr == ptr)
+        if (next_node != NULL && next_node->ptr == ptr)
         {
             temp->list_data.next_node = next_node->list_data.next_node;
             gcy_free_allocation_node(next_node);
