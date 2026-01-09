@@ -78,6 +78,7 @@ size_t gcy_debug_get_allocations_count();
 
 #define GCY_KILO 1024
 #define GCY_MEGA (GCY_KILO * 1024)
+#define GCY_PROFILER_SIZE (32 * GCY_MEGA)
 
 static GCY_Profiler* profiler = NULL;
 static int gcy__internal_event_cmp(const void* first_event, const void* second_event);
@@ -111,7 +112,7 @@ static void gcy__internal_init_profiler()
         return;
     }
 
-    profiler = mmap(NULL, 32 * GCY_MEGA,
+    profiler = mmap(NULL, GCY_PROFILER_SIZE,
             PROT_READ | PROT_WRITE,
             MAP_ANON | MAP_SHARED,
             -1, 0);
@@ -171,8 +172,11 @@ static void gcy__internal_print_overview()
         }
 
     }
+
     printf("Leaked a total of %lu bytes in %lu allocations.\n", total_leaks_bytes, total_leaks);
     printf("=====================================\n");
+
+    munmap(profiler, GCY_PROFILER_SIZE);
 }
 
 static void gcy__internal_append_allocation_event(const void* ptr, size_t size, const char* file, int line)
