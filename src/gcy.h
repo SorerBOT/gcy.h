@@ -28,30 +28,41 @@
 #include <stdlib.h>
 #ifdef GCY_MODE
 
-typedef struct _GCY_linked_list
+typedef enum
 {
-    struct _GCY_linked_list* next_node;
-} GCY_linked_list_t;
+    GCY_EVENT_ALLOC,
+    GCY_EVENT_FREE
+} GCY_Event_Type;
 
 typedef struct
 {
-    GCY_linked_list_t list_data;
     size_t size;
     const char* file;
     int line;
-    void* ptr;
-} GCY_Allocation;
+    const void* ptr;
+    GCY_Event_Type event_type;
+    size_t event_number;
+} GCY_Event;
+
+typedef struct
+{
+    volatile size_t length;
+    pid_t original_process_id;
+    GCY_Event events[];
+} GCY_Profiler;
 
 void* gcy_malloc(size_t size, const char* file, int line);
 void* gcy_calloc(size_t count, size_t size, const char* file, int line);
 void gcy_free(void* ptr);
 void gcy_print_allocations();
-GCY_Allocation* gcy_debug_get_allocations();
+GCY_Event* gcy_debug_get_allocations();
 size_t gcy_debug_get_allocations_count();
 
 #define GCY_MALLOC(size) gcy_malloc((size), __FILE__, __LINE__)
 #define GCY_CALLOC(count, size) gcy_calloc((count), (size), __FILE__, __LINE__)
 #define GCY_FREE(ptr) gcy_free((ptr))
+
+
 #else /* GCY_MODE */
 #define GCY_MALLOC(size) malloc((size))
 #define GCY_FREE(ptr) free((ptr))
@@ -59,152 +70,175 @@ size_t gcy_debug_get_allocations_count();
 #endif
 
 #ifdef GCY_IMPLEMENTATION
+
+#include <sys/mman.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdbool.h>
+#include <unistd.h>
 
+#define GCY_KILO 1024
+#define GCY_MEGA (GCY_KILO * 1024)
+#define GCY_PROFILER_SIZE (32 * GCY_MEGA)
 
-static GCY_Allocation* allocList = NULL;
-static GCY_Allocation* last_allocation = NULL;
-static size_t allocsCount = 0;
+static GCY_Profiler* profiler = NULL;
+static int gcy__internal_event_cmp(const void* first_event, const void* second_event);
+static void gcy__internal_init_profiler();
+static void gcy__internal_print_overview();
+static void gcy__internal_append_allocation_event(const void* ptr, size_t size, const char* file, int line);
 
-static void gcy__internal_append_allocation(void* ptr, size_t size, const char* file, int line);
-
-
-static void gcy__internal_append_allocation(void* ptr, size_t size, const char* file, int line)
+static int gcy__internal_event_cmp(const void* first, const void* second)
 {
-    GCY_Allocation* root_new = malloc(sizeof(GCY_Allocation));
-    if (root_new == NULL)
+    const GCY_Event* first_event = first;
+    const GCY_Event* second_event = second;
+
+    if (first_event->ptr != second_event->ptr)
     {
-        fprintf(stderr, "Error: malloc in Garbage-Collectyour library allocation");
+        return first_event->ptr - second_event->ptr;
+    }
+
+    return first_event->event_number - second_event->event_number;
+}
+
+
+
+/*
+ *        [ (ALLOCATED MEMORY, address, size, file name, line number), (FREE MEMORY, address) ]
+ */
+__attribute__((constructor))
+static void gcy__internal_init_profiler()
+{
+    if (profiler != NULL)
+    {
+        return;
+    }
+
+    profiler = mmap(NULL, GCY_PROFILER_SIZE,
+            PROT_READ | PROT_WRITE,
+            MAP_ANON | MAP_SHARED,
+            -1, 0);
+
+    if (profiler == NULL)
+    {
+        perror("GCY: failed to allocate profiler.\n");
         exit(EXIT_FAILURE);
     }
 
-    *root_new = (GCY_Allocation)
+    *profiler = (GCY_Profiler)
     {
-        .list_data = (GCY_linked_list_t)
-        {
-            .next_node = NULL
-        },
-        .size = size,
-        .file = file,
-        .line = line,
-        .ptr  = ptr
+        .length = 0,
+        .original_process_id = getpid()
     };
+}
 
-    if (last_allocation == NULL) /* This implies that allocList is also NULL */
+__attribute__((destructor))
+static void gcy__internal_print_overview()
+{
+    if (getpid() != profiler->original_process_id)
     {
-        if (allocList != NULL)
+        return;
+    }
+
+    printf("=====================================\n");
+    printf("GCY Overview\n");
+
+    size_t total_leaks = 0;
+    size_t total_leaks_bytes = 0;
+
+    qsort(profiler->events, profiler->length, sizeof(GCY_Event), gcy__internal_event_cmp);
+
+    for (size_t i = 0; i < profiler->length; ++i)
+    {
+        GCY_Event event = profiler->events[i];
+
+        if (event.event_type == GCY_EVENT_ALLOC)
         {
-            fprintf(stderr, "Error: GCY internal error.");
-            exit(EXIT_INCONSISTENT_ALLOC_LIST);
+            bool is_freed = false;
+            if (i < profiler->length - 1)
+            {
+                GCY_Event event_next = profiler->events[i+1];
+                if (event.ptr == event_next.ptr
+                        && event_next.event_type == GCY_EVENT_FREE)
+                {
+                    is_freed = true;
+                }
+            }
+
+            if (!is_freed)
+            {
+                ++total_leaks;
+                total_leaks_bytes += event.size;
+                printf("File: %s, line: %d, size: %lu, address: %p\n", event.file, event.line, event.size, event.ptr);
+            }
         }
 
-        last_allocation = root_new;
-        allocList = root_new;
-    }
-    else
-    {
-        last_allocation->list_data.next_node = (GCY_linked_list_t*) root_new;
-        last_allocation = root_new;
     }
 
-    ++allocsCount;
+    printf("Leaked a total of %lu bytes in %lu allocations.\n", total_leaks_bytes, total_leaks);
+    printf("=====================================\n");
+
+    munmap(profiler, GCY_PROFILER_SIZE);
+}
+
+static void gcy__internal_append_allocation_event(const void* ptr, size_t size, const char* file, int line)
+{
+    size_t old_length = __sync_fetch_and_add(&profiler->length, 1);
+
+    GCY_Event event =
+    {
+        .ptr    = ptr,
+        .size   = size,
+        .event_type  = GCY_EVENT_ALLOC,
+        .file   = file,
+        .line   = line,
+        .event_number = old_length
+    };
+
+    profiler->events[old_length] = event;
+}
+void* gcy_calloc(size_t count, size_t size, const char* file, int line)
+{
+    void* ptr = calloc(count, size);
+
+    if (ptr == NULL)
+    {
+        perror("GCY: failed to allocate memory for user.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    gcy__internal_append_allocation_event(ptr, size, file, line);
+
+    return ptr;
 }
 void* gcy_malloc(size_t size, const char* file, int line)
 {
     void* ptr = malloc(size);
+
     if (ptr == NULL)
     {
-        fprintf(stderr, "Error: malloc");
+        perror("GCY: failed to allocate memory for user.\n");
         exit(EXIT_FAILURE);
     }
 
-    gcy__internal_append_allocation(ptr, size, file, line);
+    gcy__internal_append_allocation_event(ptr, size, file, line);
 
     return ptr;
-}
-
-void* gcy_calloc(size_t count, size_t size, const char* file, int line)
-{
-    void* ptr = calloc(count, size);
-    if (ptr == NULL)
-    {
-        fprintf(stderr, "Error: malloc");
-        exit(EXIT_FAILURE);
-    }
-
-    gcy__internal_append_allocation(ptr, count * size, file, line);
-
-    return ptr;
-}
-
-void gcy_free_allocation_node(GCY_Allocation* node)
-{
-    free(node->ptr);
-    free(node);
 }
 
 void gcy_free(void* ptr)
 {
-    if (ptr == NULL)
+    free(ptr);
+
+    size_t old_length = __sync_fetch_and_add(&profiler->length, 1);
+
+    GCY_Event event =
     {
-        return;
-    }
-    GCY_Allocation* temp = allocList;
-    if (temp != NULL && temp->ptr == ptr)
-    {
-        allocList = (GCY_Allocation*) allocList->list_data.next_node;
-        gcy_free_allocation_node(temp);
-        --allocsCount;
-        return;
-    }
-    while (temp != NULL)
-    {
-        GCY_Allocation* next_node = (GCY_Allocation*) temp->list_data.next_node;
-        if (next_node != NULL && next_node->ptr == ptr)
-        {
-            temp->list_data.next_node = next_node->list_data.next_node;
-            gcy_free_allocation_node(next_node);
-            --allocsCount;
-            return;
-        }
-        temp = next_node;
-    }
+        .ptr            = ptr,
+        .event_type     = GCY_EVENT_FREE,
+        .event_number   = old_length
+    };
+
+    profiler->events[old_length] = event;
 }
 
-void gcy_print_allocation(const GCY_Allocation* allocation)
-{
-    printf("File: %s, line: %d, size: %lu, address: %p\n", allocation->file, allocation->line, allocation->size, allocation->ptr);
-}
-
-__attribute__((destructor))
-void gcy_print_allocations()
-{
-
-    printf("=============================================\n");
-    printf("Garbage Collect-your Data:\n");
-    if (allocList == NULL)
-    {
-        printf("No garbage to collect.\n");
-    }
-    GCY_Allocation* temp = allocList;
-    while (temp != NULL)
-    {
-        gcy_print_allocation(temp);
-        temp = (GCY_Allocation*) temp->list_data.next_node;
-    }
-    printf("=============================================\n");
-}
-
-GCY_Allocation* gcy_debug_get_allocations()
-{
-    return allocList;
-}
-
-size_t gcy_debug_get_allocations_count()
-{
-    return allocsCount;
-}
 
 #endif /* GCY_IMPLEMENTATION */
-
