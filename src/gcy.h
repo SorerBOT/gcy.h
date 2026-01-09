@@ -41,6 +41,7 @@ typedef struct
     int line;
     void* ptr;
     GCY_Event_Type event_type;
+    size_t event_number;
 } GCY_Event;
 
 typedef struct
@@ -78,8 +79,24 @@ size_t gcy_debug_get_allocations_count();
 
 GCY_Profiler* profiler = NULL;
 
+static int gcy__internal_event_cmp(const void* first_event, const void* second_event);
 static void gcy__internal_init_profiler();
 static void gcy__internal_print_overview();
+
+static int gcy__internal_event_cmp(const void* first, const void* second)
+{
+    const GCY_Event* first_event = first;
+    const GCY_Event* second_event = second;
+
+    if (first_event->ptr != second_event->ptr)
+    {
+        return first_event->ptr - second_event->ptr;
+    }
+
+    return first_event->event_number - second_event->event_number;
+}
+
+
 
 /*
  *        [ (ALLOCATED MEMORY, address, size, file name, line number), (FREE MEMORY, address) ]
@@ -87,7 +104,10 @@ static void gcy__internal_print_overview();
 __attribute__((constructor))
 static void gcy__internal_init_profiler()
 {
-    profiler = mmap(NULL, 32 * GCY_MEGA, PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED, -1, 0);
+    profiler = mmap(NULL, 32 * GCY_MEGA,
+            PROT_READ | PROT_WRITE,
+            MAP_ANON | MAP_SHARED,
+            -1, 0);
 
     if (profiler == NULL)
     {
@@ -111,6 +131,8 @@ static void gcy__internal_print_overview()
     size_t total_leaks = 0;
     size_t total_leaks_bytes = 0;
 
+    qsort(profiler->events, profiler->length, sizeof(GCY_Event), gcy__internal_event_cmp);
+
     for (size_t i = 0; i < profiler->length; ++i)
     {
         GCY_Event event = profiler->events[i];
@@ -118,19 +140,16 @@ static void gcy__internal_print_overview()
         if (event.event_type == GCY_EVENT_ALLOC)
         {
             bool is_freed = false;
-            for (size_t j = i + 1; j < profiler->length; ++j)
+            if (i < profiler->length - 1)
             {
-                GCY_Event current_event = profiler->events[j];
-                if (event.ptr != current_event.ptr)
-                {
-                    continue;
-                }
-
-                if (current_event.event_type == GCY_EVENT_FREE)
+                GCY_Event event_next = profiler->events[i+1];
+                if (event.ptr == event_next.ptr
+                        && event_next.event_type == GCY_EVENT_FREE)
                 {
                     is_freed = true;
                 }
             }
+
             if (!is_freed)
             {
                 ++total_leaks;
@@ -144,7 +163,6 @@ static void gcy__internal_print_overview()
     printf("=====================================\n");
 }
 
-
 void* gcy_malloc(size_t size, const char* file, int line)
 {
     void* ptr = malloc(size);
@@ -155,17 +173,19 @@ void* gcy_malloc(size_t size, const char* file, int line)
         exit(EXIT_FAILURE);
     }
 
-    GCY_Event allocation =
+    size_t old_length = __sync_fetch_and_add(&profiler->length, 1);
+
+    GCY_Event event =
     {
         .ptr    = ptr,
         .size   = size,
         .event_type  = GCY_EVENT_ALLOC,
         .file   = file,
-        .line   = line
+        .line   = line,
+        .event_number = old_length
     };
 
-    size_t old_length = __sync_fetch_and_add(&profiler->length, 1);
-    profiler->events[old_length] = allocation;
+    profiler->events[old_length] = event;
 
     return ptr;
 }
@@ -174,13 +194,15 @@ void gcy_free(void* ptr)
 {
     free(ptr);
 
+    size_t old_length = __sync_fetch_and_add(&profiler->length, 1);
+
     GCY_Event event =
     {
-        .ptr         = ptr,
-        .event_type  = GCY_EVENT_FREE,
+        .ptr            = ptr,
+        .event_type     = GCY_EVENT_FREE,
+        .event_number   = old_length
     };
 
-    size_t old_length = __sync_fetch_and_add(&profiler->length, 1);
     profiler->events[old_length] = event;
 }
 
