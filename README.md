@@ -42,7 +42,7 @@ int main()
     GCY_FREE(ptr_2);
 }
 ```
-Garbage Collect-your steps into action after the your code finishes, and outputs the following:
+Garbage Collect-your steps into action after your code finishes, and outputs the following:
 ```shell
 =============================================
 Garbage Collect-your Data:
