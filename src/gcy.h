@@ -205,7 +205,7 @@ void* gcy_calloc(size_t count, size_t size, const char* file, int line)
         exit(EXIT_FAILURE);
     }
 
-    gcy__internal_append_allocation_event(ptr, size, file, line);
+    gcy__internal_append_allocation_event(ptr, count * size, file, line);
 
     return ptr;
 }
