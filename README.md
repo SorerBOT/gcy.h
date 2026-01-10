@@ -3,7 +3,7 @@ As the name implies, this is not a Garbage Collector, but it also isn't far from
 
 ## Features
 * Header Only, the library file is single, and ready to mingle!
-* Barely any runtime overhead! Every `malloc` / `free` call has an overhead of `O(1)`
+* Barely any runtime overhead! Using `mmap` once to allocate all the memory in the constructor (GCC), then every `malloc` / `free` call has an overhead of `O(1)`
 
 ## Inspiration
 Felt like it'd be interesting to learn how Valgrind's memcheck works under the hood. A short google-search taught me that Valgrind somehow takes the compiled code, disassembles it, adds its own shenanigans, then recompiles it, and repeats the same allocations performed by the user once again, in order to keep track of them.
