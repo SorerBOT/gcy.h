@@ -88,6 +88,9 @@ size_t gcy_debug_get_allocations_count();
 #define GCY_PROFILER_MAX_CAPACITY ((GCY_PROFILER_SIZE - sizeof(GCY_Profiler)) / sizeof(GCY_Event))
 
 static GCY_Profiler* profiler = NULL;
+static bool did_print_memory_exceeded_error = false;
+
+
 static int gcy__internal_event_cmp(const void* first_event, const void* second_event);
 static void gcy__internal_init_profiler();
 static void gcy__internal_print_overview();
@@ -190,7 +193,11 @@ static void gcy__internal_append_allocation_event(const void* ptr, size_t size, 
 {
     if (profiler->length >= GCY_PROFILER_MAX_CAPACITY)
     {
-        fprintf(stderr, "GCY: ran out of space. stopped reporting. you can set the amout of memory GCY uses by defining GCY_USER_PROFILER_SIZE in the same file you define GCY_IMPLEMENTATION. The default size is 1MB\n");
+        if (did_print_memory_exceeded_error == false)
+        {
+            did_print_memory_exceeded_error = true;
+            fprintf(stderr, "GCY: ran out of space. stopped reporting. you can set the amout of memory GCY uses by defining GCY_USER_PROFILER_SIZE in the same file you define GCY_IMPLEMENTATION. The default size is 1MB\n");
+        }
         return;
     }
 
